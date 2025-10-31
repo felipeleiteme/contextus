@@ -8,6 +8,7 @@ import { RegisterScreen } from '../screens/RegisterScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { VoiceScreen } from '../screens/VoiceScreen';
 import { KBFSetupScreen } from '../screens/KBFSetupScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
 import { ActivityIndicator, View } from 'react-native';
 
 const STORAGE_KEY_HAS_CONFIGURED = '@contextus:has_configured';
@@ -78,11 +79,13 @@ export const AppNavigator: React.FC = () => {
               <>
                 <Stack.Screen name="KBFSetup" component={KBFSetupScreen} />
                 <Stack.Screen name="Voice" component={VoiceScreen} />
+                <Stack.Screen name="Settings" component={SettingsScreen} />
               </>
             ) : (
               // Returning user - show main screen first
               <>
                 <Stack.Screen name="Voice" component={VoiceScreen} />
+                <Stack.Screen name="Settings" component={SettingsScreen} />
                 <Stack.Screen name="KBFSetup" component={KBFSetupScreen} />
               </>
             )}

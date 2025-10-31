@@ -12,7 +12,7 @@ import {
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAuth } from '../contexts/AuthContext';
+import { useNavigation } from '@react-navigation/native';
 import { processAudio } from '../services/api';
 
 const STORAGE_KEY_KBF_PROMPT = '@contextus:kbf_prompt';
@@ -24,7 +24,8 @@ export const VoiceScreen: React.FC = () => {
   const [context, setContext] = useState('');
   const [transcription, setTranscription] = useState('');
   const [response, setResponse] = useState('');
-  const { signOut } = useAuth();
+  const [message, setMessage] = useState('');
+  const navigation = useNavigation();
 
   useEffect(() => {
     // Request audio permissions and load saved KBF
@@ -133,84 +134,41 @@ export const VoiceScreen: React.FC = () => {
     }
   };
 
-  const handleSaveContext = async () => {
-    try {
-      if (context.trim()) {
-        await AsyncStorage.setItem(STORAGE_KEY_KBF_PROMPT, context.trim());
-        Alert.alert('Sucesso', 'Prompt KBF salvo com sucesso!');
-      }
-    } catch (error) {
-      console.error('Error saving KBF prompt:', error);
-      Alert.alert('Erro', 'Não foi possível salvar o prompt');
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await signOut();
-    } catch (error: any) {
-      Alert.alert('Erro', error.message);
-    }
-  };
-
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Voice Assistant</Text>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Sair</Text>
+        <TouchableOpacity style={styles.headerButton}>
+          <Text style={styles.headerIcon}>☰</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Contextus</Text>
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={() => navigation.navigate('Settings' as never)}
+        >
+          <Text style={styles.headerIcon}>👤</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.labelRow}>
-          <Text style={styles.label}>Prompt KBF Personalizado</Text>
-          {context.trim() && (
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={handleSaveContext}
-            >
-              <Text style={styles.saveButtonText}>💾 Salvar</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        <TextInput
-          style={styles.contextInput}
-          placeholder="Ex: Você é um assistente técnico especializado em...{'\n\n'}(Este prompt define como a IA irá responder)"
-          placeholderTextColor="#999"
-          value={context}
-          onChangeText={setContext}
-          multiline
-          numberOfLines={4}
-        />
-
-        <View style={styles.recordingContainer}>
-          {isProcessing ? (
-            <View style={styles.processingContainer}>
-              <ActivityIndicator size="large" color="#007AFF" />
-              <Text style={styles.processingText}>Processando áudio...</Text>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={[
-                styles.recordButton,
-                isRecording && styles.recordButtonActive,
-              ]}
-              onPress={isRecording ? stopRecording : startRecording}
-              disabled={isProcessing}
-            >
-              <Text style={styles.recordButtonText}>
-                {isRecording ? '🔴 Parar Gravação' : '🎤 Iniciar Gravação'}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {isRecording && (
-            <Text style={styles.recordingIndicator}>
-              Gravando... Toque para parar
+      <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
+        {/* Welcome Body */}
+        {!transcription && !response && !isProcessing && (
+          <View style={styles.welcomeContainer}>
+            <Text style={styles.welcomeEmoji}>🤖</Text>
+            <Text style={styles.welcomeTitle}>Como posso te ajudar?</Text>
+            <Text style={styles.welcomeSubtitle}>
+              Toque no microfone ou digite sua pergunta
             </Text>
-          )}
-        </View>
+          </View>
+        )}
+
+        {/* Processing Indicator */}
+        {isProcessing && (
+          <View style={styles.processingContainer}>
+            <ActivityIndicator size="large" color="#007AFF" />
+            <Text style={styles.processingText}>Processando áudio...</Text>
+          </View>
+        )}
 
         {transcription && (
           <View style={styles.resultContainer}>
@@ -229,8 +187,29 @@ export const VoiceScreen: React.FC = () => {
             </View>
           </View>
         )}
+      </ScrollView>
+
+      {/* Footer Input Bar */}
+      <View style={styles.footer}>
+        <TextInput
+          style={styles.messageInput}
+          placeholder="Escreva ou segure o microfone..."
+          placeholderTextColor="#999"
+          value={message}
+          onChangeText={setMessage}
+        />
+        <TouchableOpacity
+          style={[styles.micButton, isRecording && styles.micButtonActive]}
+          onPressIn={startRecording}
+          onPressOut={stopRecording}
+          disabled={isProcessing}
+        >
+          <Text style={styles.micButtonText}>
+            {isRecording ? '🔴' : '🎤'}
+          </Text>
+        </TouchableOpacity>
       </View>
-    </ScrollView>
+    </View>
   );
 };
 
@@ -243,94 +222,60 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 20,
     paddingTop: 60,
+    paddingBottom: 15,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#ddd',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  logoutButton: {
+  headerButton: {
     padding: 10,
   },
-  logoutText: {
-    color: '#FF3B30',
-    fontSize: 16,
-  },
-  content: {
-    padding: 20,
-  },
-  labelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
+  headerIcon: {
+    fontSize: 24,
     color: '#333',
   },
-  saveButton: {
-    backgroundColor: '#34C759',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
   },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600',
+  scrollContent: {
+    flex: 1,
   },
-  contextInput: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 15,
-    fontSize: 14,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    minHeight: 100,
-    textAlignVertical: 'top',
-    marginBottom: 30,
+  scrollContentContainer: {
+    padding: 20,
+    flexGrow: 1,
   },
-  recordingContainer: {
-    alignItems: 'center',
-    marginVertical: 30,
-  },
-  recordButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 75,
-    width: 150,
-    height: 150,
+  welcomeContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 8,
+    paddingVertical: 60,
   },
-  recordButtonActive: {
-    backgroundColor: '#FF3B30',
+  welcomeEmoji: {
+    fontSize: 80,
+    marginBottom: 20,
   },
-  recordButtonText: {
-    color: '#fff',
-    fontSize: 18,
+  welcomeTitle: {
+    fontSize: 28,
     fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
     textAlign: 'center',
   },
-  recordingIndicator: {
-    marginTop: 20,
+  welcomeSubtitle: {
     fontSize: 16,
-    color: '#FF3B30',
-    fontWeight: '600',
+    color: '#666',
+    textAlign: 'center',
+    paddingHorizontal: 40,
   },
   processingContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
+    paddingVertical: 60,
   },
   processingText: {
     marginTop: 15,
@@ -357,5 +302,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     lineHeight: 20,
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#ddd',
+  },
+  messageInput: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 25,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    fontSize: 16,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  micButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  micButtonActive: {
+    backgroundColor: '#FF3B30',
+  },
+  micButtonText: {
+    fontSize: 24,
   },
 });

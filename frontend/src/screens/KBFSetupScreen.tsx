@@ -22,24 +22,43 @@ const STORAGE_KEYS = {
 export const KBFSetupScreen: React.FC = () => {
   const [kbfPrompt, setKbfPrompt] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isFirstRun, setIsFirstRun] = useState(true);
   const navigation = useNavigation();
+
+  // Load saved KBF prompt on mount
+  useEffect(() => {
+    const loadSavedKBF = async () => {
+      try {
+        const savedKBF = await AsyncStorage.getItem(STORAGE_KEYS.KBF_PROMPT);
+        const hasConfigured = await AsyncStorage.getItem(STORAGE_KEYS.HAS_CONFIGURED);
+
+        if (savedKBF) {
+          setKbfPrompt(savedKBF);
+          console.log('KBFSetupScreen: Loaded saved KBF prompt');
+        }
+
+        // Check if this is first run or editing
+        setIsFirstRun(hasConfigured !== 'true');
+      } catch (error) {
+        console.error('Error loading KBF prompt:', error);
+      }
+    };
+
+    loadSavedKBF();
+  }, []);
 
   const handleSkip = async () => {
     try {
       setIsSaving(true);
 
-      // Marca como configurado, mas sem salvar prompt
-      await AsyncStorage.setItem(STORAGE_KEYS.HAS_CONFIGURED, 'true');
+      // Se for o primeiro acesso, marca como configurado
+      if (isFirstRun) {
+        await AsyncStorage.setItem(STORAGE_KEYS.HAS_CONFIGURED, 'true');
+        console.log('Setup skipped, has_configured set to true');
+      }
 
-      console.log('Setup skipped, has_configured set to true');
-
-      // Força navegação para Voice usando CommonActions
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: 'Voice' }],
-        })
-      );
+      // Volta para a tela anterior
+      navigation.goBack();
     } catch (error) {
       console.error('Error skipping setup:', error);
       Alert.alert('Erro', 'Não foi possível pular a configuração');
@@ -59,18 +78,16 @@ export const KBFSetupScreen: React.FC = () => {
       // Salva o prompt KBF
       await AsyncStorage.setItem(STORAGE_KEYS.KBF_PROMPT, kbfPrompt.trim());
 
-      // Marca como configurado
-      await AsyncStorage.setItem(STORAGE_KEYS.HAS_CONFIGURED, 'true');
+      // Se for o primeiro acesso, marca como configurado
+      if (isFirstRun) {
+        await AsyncStorage.setItem(STORAGE_KEYS.HAS_CONFIGURED, 'true');
+        console.log('KBF saved, has_configured set to true');
+      } else {
+        console.log('KBF updated');
+      }
 
-      console.log('KBF saved, has_configured set to true');
-
-      // Força navegação para Voice usando CommonActions
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: 'Voice' }],
-        })
-      );
+      // Volta para a tela anterior
+      navigation.goBack();
     } catch (error) {
       console.error('Error saving KBF setup:', error);
       Alert.alert('Erro', 'Não foi possível salvar a configuração');
