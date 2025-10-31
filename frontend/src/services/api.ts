@@ -91,4 +91,25 @@ export const processAudio = async (
   return response.data;
 };
 
+export interface SendChatMessageResponse {
+  success: boolean;
+  response: string;
+}
+
+export const sendChatMessage = async (
+  message: string,
+  context?: string
+): Promise<SendChatMessageResponse> => {
+  const payload: Record<string, string> = {
+    message,
+  };
+
+  if (context && context.trim().length > 0) {
+    payload.context_text = context.trim();
+  }
+
+  const response = await apiClient.post<SendChatMessageResponse>('/chat/', payload);
+  return response.data;
+};
+
 export default apiClient;

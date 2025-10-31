@@ -7,6 +7,7 @@ from services.gladia_service import transcribe_audio
 from services.qwen_service import generate_response
 from services.rag_service import get_rag_context
 from config import get_settings
+from pydantic import BaseModel
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -28,6 +29,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class ChatRequest(BaseModel):
+    message: str
+    context_text: Optional[str] = None
 
 
 @app.get("/")
@@ -123,6 +129,68 @@ async def process_audio(
         raise
     except Exception as e:
         logger.error(f"Erro no processamento: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
+
+@app.post("/chat/")
+async def chat_message(
+    payload: ChatRequest,
+    user_data: dict = Depends(verify_jwt)
+):
+    """
+    Endpoint para processar mensagens de texto digitadas pelo usuário.
+    Reutiliza a mesma lógica de prioridade de contexto do fluxo de áudio.
+    """
+    try:
+        user_id = user_data["user_id"]
+        logger.info(f"Processando mensagem de chat para user_id: {user_id}")
+
+        subscription = await check_subscription(user_id)
+        logger.info(f"Assinatura: {subscription['status']}")
+
+        message_text = (payload.message or "").strip()
+        if not message_text:
+            raise HTTPException(
+                status_code=400,
+                detail="O campo 'message' não pode estar vazio."
+            )
+
+        logger.info("Buscando contexto no RAG para mensagem de texto...")
+        db_context = await get_rag_context(supabase, message_text)
+
+        if db_context:
+            logger.info(f"RAG encontrou contexto: {len(db_context)} caracteres")
+        else:
+            logger.info("RAG não encontrou contexto relevante para a mensagem")
+
+        logger.info("Gerando resposta com Qwen LLM para mensagem de texto...")
+        response_text = await generate_response(
+            transcription=message_text,
+            context_text=payload.context_text,
+            db_context=db_context
+        )
+
+        logger.info("Resposta de chat gerada com sucesso")
+
+        context_used = "user_context" if (payload.context_text and payload.context_text.strip()) else (
+            "rag_context" if db_context else "no_context"
+        )
+
+        return {
+            "success": True,
+            "user_id": user_id,
+            "subscription_status": subscription["status"],
+            "response": response_text,
+            "context_used": context_used
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro no processamento da mensagem de chat: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Internal server error: {str(e)}"
