@@ -1,0 +1,257 @@
+# ============================================
+# CONTEXTUS - Voice Assistant Project
+# Git Clean: Apenas código-fonte será commitado
+# ============================================
+
+# ===== CREDENCIAIS E SECRETS =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+secrets/
+credentials/
+
+# ===== PYTHON BACKEND =====
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+.virtualenv/
+
+# Python Cache & Build
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+.hypothesis/
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.cache
+nosetests.xml
+
+# ===== FRONTEND (React Native / Expo) =====
+# Dependencies
+node_modules/
+bower_components/
+jspm_packages/
+
+# Expo
+.expo/
+.expo-shared/
+web-build/
+dist/
+
+# Build outputs
+build/
+out/
+*.tgz
+
+# Package manager files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.pnpm-debug.log*
+
+# NPM
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.npm/
+.yarn/
+.yarn-integrity
+
+# ===== MOBILE SPECIFIC =====
+# iOS
+ios/Pods/
+ios/build/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.xccheckout
+*.moved-aside
+DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Android
+android/app/build/
+android/.gradle/
+android/captures/
+android/local.properties
+*.apk
+*.ap_
+*.aab
+
+# ===== LOGS =====
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+pip-log.txt
+
+# ===== DATABASE =====
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-shm
+*.db-wal
+
+# ===== IDEs E EDITORES =====
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm / IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+.idea_modules/
+
+# Vim
+*.swp
+*.swo
+*~
+.vim/
+
+# Emacs
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# AI Assistants
+.claude/
+.qodo/
+.cursor/
+.windsurf/
+.copilot/
+
+# ===== SISTEMA OPERACIONAL =====
+# macOS
+.DS_Store
+.DS_Store?
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.DocumentRevisions-V100
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+.nfs*
+
+# ===== TEMPORÁRIOS =====
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*.orig
+.cache/
+tmp/
+temp/
+
+# ===== OUTROS =====
+# Compiled source
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
+# Archives
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Media (se não fizer parte do projeto)
+# *.mp3
+# *.mp4
+# *.m4a
+# *.wav
+
+# ===== DOCUMENTAÇÃO GERADA =====
+site/
+_site/
+.sass-cache/
+.jekyll-cache/
+.jekyll-metadata
+
+# ===== PERMITIR ARQUIVOS ESSENCIAIS =====
+!.gitkeep
+!.gitignore
+!README.md
+!requirements.txt
+!package.json
