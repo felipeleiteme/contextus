@@ -6,11 +6,15 @@ import {
   KeyboardAvoidingView,
   ListRenderItem,
   Platform,
+  Pressable,
+  TouchableOpacity,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
+  GestureResponderEvent,
+  Animated,
+  Vibration,
 } from 'react-native';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
@@ -20,6 +24,8 @@ import { processAudio, sendChatMessage } from '../services/api';
 import { useChat, Message, createMessage } from '../contexts/ChatContext';
 
 const STORAGE_KEY_KBF_PROMPT = '@contextus:kbf_prompt';
+const MIN_AUDIO_DURATION_MS = 800;
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const formatTimestamp = (timestamp: string): string => {
   try {
@@ -38,14 +44,71 @@ const formatTimestamp = (timestamp: string): string => {
 export const ChatScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { activeConversation, activeConversationId, addMessageToConversation } = useChat();
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [inputText, setInputText] = useState('');
   const [kbfPrompt, setKbfPrompt] = useState('');
+  const [isCancellingRecording, setIsCancellingRecording] = useState(false);
+  const [recordingDurationMs, setRecordingDurationMs] = useState(0);
   const flatListRef = useRef<FlatList<Message>>(null);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const pendingStopRef = useRef(false);
+  const pressStartXRef = useRef<number | null>(null);
+  const recordStartTimestampRef = useRef<number | null>(null);
+  const micScale = useRef(new Animated.Value(1)).current;
 
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const messages = activeConversation?.messages ?? [];
+
+  const animateMicScale = useCallback(
+    (toValue: number) => {
+      Animated.spring(micScale, {
+        toValue,
+        useNativeDriver: true,
+        friction: 6,
+        tension: 220,
+      }).start();
+    },
+    [micScale]
+  );
+
+  const resetMicScale = useCallback(() => {
+    animateMicScale(1);
+  }, [animateMicScale]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (isRecording && recordStartTimestampRef.current) {
+      interval = setInterval(() => {
+        if (recordStartTimestampRef.current) {
+          setRecordingDurationMs(Date.now() - recordStartTimestampRef.current);
+        }
+      }, 200);
+    } else {
+      setRecordingDurationMs(0);
+    }
+
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [isRecording]);
+
+  useEffect(() => {
+    if (!isRecording) {
+      resetMicScale();
+      return;
+    }
+
+    animateMicScale(isCancellingRecording ? 0.9 : 1.12);
+  }, [animateMicScale, isCancellingRecording, isRecording, resetMicScale]);
+
+  useEffect(() => {
+    if (isRecording && isCancellingRecording) {
+      Vibration.vibrate(15);
+    }
+  }, [isCancellingRecording, isRecording]);
 
   useEffect(() => {
     (async () => {
@@ -157,10 +220,88 @@ export const ChatScreen: React.FC = () => {
     [activeConversationId, addMessageToConversation, isProcessing, kbfPrompt, validateAudioFile]
   );
 
-  const startRecording = useCallback(async () => {
+  const finalizeRecording = useCallback(
+    async (activeRecording: Audio.Recording | null, shouldProcess: boolean = true) => {
+      pendingStopRef.current = false;
+      setIsRecording(false);
+      setIsCancellingRecording(false);
+      pressStartXRef.current = null;
+      recordStartTimestampRef.current = null;
+      resetMicScale();
+
+      if (!activeRecording) {
+        return;
+      }
+
+      let status: Audio.RecordingStatus | null = null;
+      try {
+        status = await activeRecording.getStatusAsync();
+      } catch (statusError) {
+        status = null;
+      }
+
+      let uri: string | null = null;
+
+      if (status?.isRecording || status?.canRecord) {
+        try {
+          await activeRecording.stopAndUnloadAsync();
+          uri = activeRecording.getURI();
+        } catch (stopError: any) {
+          if (stopError?.message?.includes('Recorder does not exist')) {
+            console.debug('Tentativa de parar gravação já finalizada.');
+          } else {
+            console.warn('Falha ao finalizar gravação ativa:', stopError);
+          }
+        }
+      }
+
+      if (!uri) {
+        try {
+          uri = activeRecording.getURI();
+        } catch {
+          uri = null;
+        }
+      }
+
+      const durationMillis = status?.durationMillis ?? 0;
+
+      recordingRef.current = null;
+      setRecording(null);
+
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: false,
+        });
+      } catch (modeError) {
+        console.debug('Falha ao redefinir modo de áudio após finalizar gravação:', modeError);
+      }
+
+      if (!shouldProcess || !uri || durationMillis < MIN_AUDIO_DURATION_MS) {
+        if (shouldProcess && durationMillis < MIN_AUDIO_DURATION_MS) {
+          Alert.alert(
+            'Gravação muito curta',
+            'Segure o botão por um pouco mais de tempo para enviar o áudio.'
+          );
+        }
+        return;
+      }
+
+      if (uri) {
+        await handleProcessAudio(uri);
+      }
+    },
+    [handleProcessAudio, resetMicScale]
+  );
+
+  const startRecording = useCallback(async (startX: number | null = null) => {
     if (isProcessing || isRecording) {
       return;
     }
+
+    pendingStopRef.current = false;
+    setIsCancellingRecording(false);
+    pressStartXRef.current = startX;
 
     try {
       await Audio.setAudioModeAsync({
@@ -169,16 +310,9 @@ export const ChatScreen: React.FC = () => {
         staysActiveInBackground: false,
       });
 
-      if (recording) {
-        try {
-          const status = await recording.getStatusAsync();
-          if (status.canRecord || status.isRecording) {
-            await recording.stopAndUnloadAsync();
-          }
-        } catch (cleanupError) {
-          console.debug('Gravação anterior já finalizada, prosseguindo.', cleanupError);
-        }
-        setRecording(null);
+      const currentRecording = recordingRef.current;
+      if (currentRecording) {
+        await finalizeRecording(currentRecording, false);
       }
 
       const newRecording = new Audio.Recording();
@@ -186,12 +320,25 @@ export const ChatScreen: React.FC = () => {
       await newRecording.startAsync();
 
       setRecording(newRecording);
+      recordingRef.current = newRecording;
       setIsRecording(true);
+      recordStartTimestampRef.current = Date.now();
+
+      if (pendingStopRef.current) {
+        await finalizeRecording(newRecording);
+      }
     } catch (error: any) {
-      console.error('Erro ao iniciar gravação:', error);
-      Alert.alert('Erro', 'Falha ao iniciar gravação: ' + (error?.message ?? ''));
+      pendingStopRef.current = false;
+      if (error?.message?.includes('Recorder does not exist')) {
+        console.debug('Tentativa de iniciar gravação após cleanup concluído.');
+      } else {
+        console.error('Erro ao iniciar gravação:', error);
+        Alert.alert('Erro', 'Falha ao iniciar gravação: ' + (error?.message ?? ''));
+      }
       setIsRecording(false);
       setRecording(null);
+      recordingRef.current = null;
+      resetMicScale();
       try {
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: false,
@@ -201,33 +348,60 @@ export const ChatScreen: React.FC = () => {
         console.debug('Falha ao redefinir modo de áudio após erro de gravação:', modeError);
       }
     }
-  }, [isProcessing, recording]);
+  }, [finalizeRecording, isProcessing, isRecording, resetMicScale]);
 
-  const stopRecording = useCallback(async () => {
-    if (!recording) {
+  const stopRecording = useCallback(async (shouldProcess: boolean = true) => {
+    const activeRecording = recordingRef.current;
+    if (!activeRecording) {
+      pendingStopRef.current = true;
+      setIsRecording(false);
+      setIsCancellingRecording(false);
+      resetMicScale();
       return;
     }
 
-    try {
-      setIsRecording(false);
-      await recording.stopAndUnloadAsync();
+    await finalizeRecording(activeRecording, shouldProcess);
+  }, [finalizeRecording, resetMicScale]);
 
-      const uri = recording.getURI();
-      setRecording(null);
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: false,
-      });
+  const handleRecordPressIn = useCallback(
+    (event: GestureResponderEvent) => {
+      const startX = event?.nativeEvent?.pageX ?? null;
+      Vibration.vibrate(20);
+      animateMicScale(1.12);
+      startRecording(startX);
+    },
+    [animateMicScale, startRecording]
+  );
 
-      if (uri) {
-        await handleProcessAudio(uri);
+  const handleRecordPressMove = useCallback(
+    (event: GestureResponderEvent) => {
+      if (!isRecording) {
+        return;
       }
-    } catch (error: any) {
-      console.error('Erro ao finalizar gravação:', error);
-      Alert.alert('Erro', 'Falha ao parar gravação: ' + (error?.message ?? ''));
-      setRecording(null);
-    }
-  }, [handleProcessAudio, recording]);
+
+      const currentX = event?.nativeEvent?.pageX;
+      if (typeof currentX !== 'number') {
+        return;
+      }
+
+      const startX = pressStartXRef.current;
+      if (startX == null) {
+        pressStartXRef.current = currentX;
+        return;
+      }
+
+      const deltaX = currentX - startX;
+      const cancelling = deltaX < -80;
+      setIsCancellingRecording((prev) => (prev === cancelling ? prev : cancelling));
+    },
+    [isRecording]
+  );
+
+  const handleRecordPressOut = useCallback(() => {
+    const shouldProcess = !isCancellingRecording;
+    resetMicScale();
+    stopRecording(shouldProcess);
+  }, [isCancellingRecording, resetMicScale, stopRecording]);
 
   const handleSendMessage = useCallback(async () => {
     const trimmed = inputText.trim();
@@ -370,23 +544,31 @@ export const ChatScreen: React.FC = () => {
             blurOnSubmit
           />
           {isInputEmpty ? (
-            <TouchableOpacity
-              style={[
-                styles.actionButton,
+            <AnimatedPressable
+              style={({ pressed }) => [
                 styles.microphoneButton,
-                isRecording && styles.micButtonActive,
-                isProcessing && styles.disabledButton,
+                isRecording
+                  ? isCancellingRecording
+                    ? styles.micButtonCancel
+                    : styles.micButtonActive
+                  : null,
+                isProcessing ? styles.disabledButton : null,
+                { transform: [{ scale: micScale }] },
+                pressed ? styles.micButtonPressed : null,
               ]}
-              onPressIn={startRecording}
-              onPressOut={stopRecording}
+              onPressIn={handleRecordPressIn}
+              onPressOut={handleRecordPressOut}
+              onTouchMove={handleRecordPressMove}
               disabled={isProcessing}
             >
-              <Text style={styles.actionButtonIcon}>{isRecording ? '🔴' : '🎤'}</Text>
-            </TouchableOpacity>
+              <Text style={styles.actionButtonIcon}>
+                {isRecording ? (isCancellingRecording ? '↩︎' : '🔴') : '🎤'}
+              </Text>
+            </AnimatedPressable>
           ) : (
             <TouchableOpacity
               style={[
-                styles.actionButton,
+                styles.sendButtonBase,
                 styles.sendButton,
                 isProcessing && styles.disabledButton,
               ]}
@@ -397,9 +579,31 @@ export const ChatScreen: React.FC = () => {
             </TouchableOpacity>
           )}
         </View>
+
+        {isRecording && (
+          <View style={[styles.recordingOverlay, isCancellingRecording && styles.recordingOverlayCancel]}>
+            <Text style={styles.recordingTimer}>{formatDuration(recordingDurationMs)}</Text>
+            <Text style={styles.recordingMessage}>
+              {isCancellingRecording ? 'Solte para cancelar' : 'Gravando... deslize para cancelar'}
+            </Text>
+          </View>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
+};
+
+const formatDuration = (durationMs: number): string => {
+  if (!durationMs || durationMs < 0) {
+    return '00:00';
+  }
+
+  const totalSeconds = Math.round(durationMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  const pad = (value: number) => value.toString().padStart(2, '0');
+  return `${pad(minutes)}:${pad(seconds)}`;
 };
 
 const styles = StyleSheet.create({
@@ -536,15 +740,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ddd',
   },
-  actionButton: {
+  microphoneButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#007AFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  sendButtonBase: {
     width: 50,
     height: 50,
     borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#007AFF',
-  },
-  microphoneButton: {
     backgroundColor: '#007AFF',
   },
   sendButton: {
@@ -556,9 +770,15 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.6,
   },
+  micButtonPressed: {
+    opacity: 0.85,
+  },
   actionButtonIcon: {
-    fontSize: 22,
+    fontSize: 24,
     color: '#fff',
+  },
+  micButtonCancel: {
+    backgroundColor: '#FF3B30',
   },
   processingContainer: {
     paddingVertical: 16,
@@ -568,5 +788,35 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 14,
     color: '#666',
+  },
+  recordingOverlay: {
+    position: 'absolute',
+    bottom: 120,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255, 59, 48, 0.92)',
+    paddingHorizontal: 28,
+    paddingVertical: 16,
+    borderRadius: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 260,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  recordingOverlayCancel: {
+    backgroundColor: 'rgba(215, 58, 42, 0.95)',
+  },
+  recordingTimer: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  recordingMessage: {
+    fontSize: 16,
+    color: '#fff',
+    marginLeft: 16,
   },
 });
