@@ -71,7 +71,10 @@ export const SettingsScreen: React.FC = () => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>CONTA</Text>
 
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => navigation.navigate('AccountInfo' as never)}
+          >
             <Text style={styles.menuItemIcon}>ℹ️</Text>
             <Text style={styles.menuItemText}>Informações da conta</Text>
             <Text style={styles.menuItemArrow}>›</Text>

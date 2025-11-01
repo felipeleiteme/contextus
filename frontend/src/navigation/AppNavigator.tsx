@@ -8,6 +8,8 @@ import { RegisterScreen } from '../screens/RegisterScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { KBFSetupScreen } from '../screens/KBFSetupScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { AccountInfoScreen } from '../screens/AccountInfoScreen';
+import { ChangePasswordScreen } from '../screens/ChangePasswordScreen';
 import { ActivityIndicator, View } from 'react-native';
 import { DrawerNavigator } from './DrawerNavigator';
 
@@ -84,6 +86,8 @@ export const AppNavigator: React.FC = () => {
                   options={{ headerShown: false }}
                 />
                 <Stack.Screen name="Settings" component={SettingsScreen} />
+                <Stack.Screen name="AccountInfo" component={AccountInfoScreen} />
+                <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
               </>
             ) : (
               // Returning user - show main screen first
@@ -95,6 +99,8 @@ export const AppNavigator: React.FC = () => {
                 />
                 <Stack.Screen name="Settings" component={SettingsScreen} />
                 <Stack.Screen name="KBFSetup" component={KBFSetupScreen} />
+                <Stack.Screen name="AccountInfo" component={AccountInfoScreen} />
+                <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
               </>
             )}
           </>
